@@ -11,7 +11,7 @@ require(ape)
 
 GetMinDistBetweenContours<- function(topcontour, bottomcontour) {
 	## efficient way to compare top and bottom contour by only looking
-	## at necessary pairs
+	## at necessary pairs (see original publiction)
 	d<-NULL
 	topi<-1
 	boti<-1
@@ -77,10 +77,7 @@ plottree<-function(edge, xy) {
 
 
 
-
 	x<-read.tree(text="(((t1:0.02238364564,t2:0.575968103):0.3,((t7:0.2118051811,t8:0.2788739109):0.0458753889,t5:0.8623356319):0.7917935827,(t6:0.2282042881,(t3:0.5514625001,t2:0.7040172669):0.2897282881):0.3026764626):0.7412839716,((t9:0.3830648817,(t1:0.8488779333,t10:0.8147486809):0.542532298):0.5484476415,t4:0.7387184096):0.7571798237);")
-
-
 
 	xy<-as.data.frame(plotPhyloCoor(x))
 	xynew<-xy #will be updated to get the new coordinates at the end
@@ -103,7 +100,7 @@ plottree<-function(edge, xy) {
 	nodes<-order(xy$xx, decreasing=T)
 	#first traversal: get contours for each node
 	N<-list()
-	for (n in nodes) {
+	for (n in nodes[1:14]) { #START OF LOOP ON NODES
 		N[[n]]<-list()
 		childs<-edge[edge[,1]==n,2]
 		childs.ord<-childs[order(xy$yy[childs])] #childs orderd by y values (for 2nd traversal)
@@ -116,16 +113,13 @@ plottree<-function(edge, xy) {
 
 
 		descseg<-segofnodes[n,]
+
 		segtop.pre<-rbind(descseg, do.call(rbind, lapply(N[childs], function(x) x$segtop)))
 		segtop<-getContourFromSegments(segtop.pre, "top")
 
 		segbottom.pre<-rbind(descseg, do.call(rbind, lapply(N[childs], function(x) x$segbottom)))
 		segbottom<-getContourFromSegments(segbottom.pre, "bottom")
 
-		N[[n]]$childs<-childs.ord
-		N[[n]]$desc<-desc
-		N[[n]]$segtop<-segtop
-		N[[n]]$segbottom<-segbottom	
 
 
 
@@ -135,12 +129,19 @@ plottree<-function(edge, xy) {
 			#for each child c in the correct order (childs.ord)
 			#compare the top contour of c the bottom contour of c+1
 			for (nn in 2:length(childs.ord)) {
+				miniychild<-NULL
+				maxiychild<-NULL
+				#these two allow re-computing the y coo of node if child moved
 				top<-N[[childs.ord[nn-1]]]$segtop
 				bot<-N[[childs.ord[nn]]]$segbottom
 				mindist<-GetMinDistBetweenContours(top, bot)
 				print(mindist)
 				if (mindist > 1) { ##There is room for tidying!
 					mod<-mindist-1 #how much we can move down the top child.ord[nn]
+					#1. move down all y values of childs.ord[nn]
+					N[[childs.ord[nn]]]$segbottom[,c(2,4)]<-N[[childs.ord[nn]]]$segbottom[,c(2,4)]-mod
+					#et on met à jour xynew en même temps 					
+					xynew$yy[c(childs.ord[nn], N[[childs.ord[nn]]]$childs)]<-xynew$yy[c(childs.ord[nn], N[[childs.ord[nn]]]$childs)]-mod
 					#now we change the contour y values accordingly
 					print(N[[childs.ord[nn]]])
 					print(paste("current node: ",n,sep=""))
@@ -153,8 +154,17 @@ plottree<-function(edge, xy) {
 					scan()
 				}
 			}
+			#we can compute the new y of the current node: 
+			newyofcurrentnode<-mean(range(xynew$yy[childs.ord])) ###HERE WE ARE
 		}
-	}
+
+		N[[n]]$childs<-childs.ord
+		N[[n]]$desc<-desc
+		N[[n]]$segtop<-segtop
+		N[[n]]$segbottom<-segbottom	
+
+	} #END OF (FIRST) LOOP ON NODES 
+
 	# second traversal: compute for each subtree it's possible movement, given 
 	# the distance between its bottom contour and the top contour of its bottom sibling subtree
 	# at each node how much it should move down. 

@@ -55,11 +55,43 @@ for (n in nodes) {
 getContourFromSegments<-function(seg, which) {
 	allx<-sort(unique(c(seg$x1, seg$x2)))
 	newx2<-allx[2:length(allx)]
-	if (which=="top")	newy2<-	sapply(newx2, function(cx,se) max(se[cx>se$x1&cx<=se$x2,]$y1), se=seg) # cx = current x; se = seg
-	if (which=="bottom") newy2<-	sapply(newx2, function(cx,se) min(se[cx>se$x1&cx<=se$x2,]$y1), se=seg) # cx = current x; se = seg
+	if (which=="top")	{
+		newy2<-sapply(newx2, function(cx,se) max(se[cx>se$x1&cx<=se$x2,]$y1), se=seg) # cx = current x; se = seg
+		newy2i<-sapply(newx2, function(cx,se) which(cx>se$x1&cx<=se$x2)[which.max(se$y1[which(cx>se$x1&cx<=se$x2)])], se=seg)
+	}
+	if (which=="bottom") {
+		newy2<-sapply(newx2, function(cx,se) min(se[cx>se$x1&cx<=se$x2,]$y1), se=seg) # cx = current x; se = seg
+		newy2i<-sapply(newx2, function(cx,se) which(cx>se$x1&cx<=se$x2)[which.min(se$y1[which(cx>se$x1&cx<=se$x2)])], se=seg)
+	}
 	newx1<-allx[1:(length(allx)-1)]
+	newy1i<-newy2i
+
 	newy1<-newy2
-	newseg<-data.frame(x1=newx1, y1=newy1, x2=newx2, y2=newy2)
+
+
+	#we simplify segments by merging thsoe on same horiz  (bout à bout)
+	where2mergei<-which((newy1i[2:length(newy1i)]-newy2i[1:(length(newy1i)-1)])==0)
+	if(length(where2mergei)>0) {
+		newx1<-newx1[-(where2mergei+1)]
+		newy1i<-newy1i[-(where2mergei+1)]
+		newx2<-newx2[-(where2mergei)]
+		newy2i<-newy2i[-(where2mergei)]
+	}
+
+	newy1ok<-seg$y1[newy1i]
+	newy2ok<-newy1ok
+
+
+	#we simplify segments by merging thsoe on same horiz  (bout à bout)
+	where2merge<-which((newy1[2:length(newy1)]-newy2[1:(length(newy1)-1)])==0)
+	if(length(where2merge)>0) {
+		newx1<-newx1[-(where2merge+1)]
+		newy1<-newy1[-(where2merge+1)]
+		newx2<-newx2[-(where2merge)]
+		newy2<-newy2[-(where2merge)]
+	}
+
+	newseg<-data.frame(x1=newx1, y1=newy1ok, x2=newx2, y2=newy2)
 	##TODO: simplify new seg to remove segments "bout à bout"
 	return(newseg)
 }

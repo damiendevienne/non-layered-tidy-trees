@@ -1,6 +1,6 @@
 # Implementation of the non layered tidy tree layout for phylogenetic trees
 
-Implementation of the algorithm in O(n) proposed in van der Ploeg, 2014, adapted for plotting phylogenetic trees.
+Implementation of the algorithm in O(n) proposed in van der Ploeg, 2014 (https://onlinelibrary.wiley.com/doi/10.1002/spe.2213), adapted for plotting phylogenetic trees.
 
  -  `tidytree.R` contains functions implementing a standalone version of the algo, with basic functionality. The main function for plotting a tree in "tidy" mode is as follows.
 ```R
@@ -36,4 +36,4 @@ If you are curious about this new layout, here is how it looks like: On the left
 ![compare tidy and non-tidy](tidy.png)
 
 --------------------------------
-For questions/remarks, please contact Damien de Vienne : damien.de-vienne@univ-lyon1.fr
+For questions/remarks/bug reports, please contact Damien de Vienne : damien.de-vienne@univ-lyon1.fr

@@ -24,7 +24,7 @@ GetMinDistBetweenContours<- function(topcontour, bottomcontour) {
 }
 
 
-getContourFromSegments<-function(seg, which) {
+GetContourPairsFromSegments<-function(seg, which) {
 	allx<-sort(unique(c(seg$x1, seg$x2)))
 	newx2<-allx[2:length(allx)]
 	if (which=="top")	{
@@ -58,8 +58,8 @@ segplot<-function(mat, col="red", lwd=2) {
 }
 
 
-plottree<-function(edge, xy) {
-	plot(xy, type="n", frame.plot=FALSE, axes=F, xlab="", ylab="")	
+plottree<-function(edge, xy, xlim, ylim) {
+	plot(xy, type="n", frame.plot=FALSE, axes=F, xlab="", ylab="", xlim=xlim, ylim=ylim)	
 	X1<-xy$xx[edge[,1]]
 	Y1<-xy$yy[edge[,2]]
 	X2<-xy$xx[edge[,2]]
@@ -74,99 +74,222 @@ plottree<-function(edge, xy) {
 
 
 
+silent<-function(x) {
+
+#	par(mfrow=c(1,2))
 
 
-
-	x<-read.tree(text="(((t1:0.02238364564,t2:0.575968103):0.3,((t7:0.2118051811,t8:0.2788739109):0.0458753889,t5:0.8623356319):0.7917935827,(t6:0.2282042881,(t3:0.5514625001,t2:0.7040172669):0.2897282881):0.3026764626):0.7412839716,((t9:0.3830648817,(t1:0.8488779333,t10:0.8147486809):0.542532298):0.5484476415,t4:0.7387184096):0.7571798237);")
+#	x<-read.tree(text="(((t1:0.02238364564,t2:0.575968103):0.3,((t7:0.2118051811,t8:0.2788739109):0.0458753889,t5:0.8623356319):0.7917935827,(t6:0.2282042881,(t3:0.5514625001,t2:0.7040172669):0.2897282881):0.3026764626):0.7412839716,((t9:0.3830648817,(t1:0.8488779333,t10:0.8147486809):0.542532298):0.5484476415,t4:0.7387184096):0.7571798237);")
 
 	xy<-as.data.frame(plotPhyloCoor(x))
-	xynew<-xy #will be updated to get the new coordinates at the end
-	########## FOR DEV PURPOSE ONLY
-	plot(x)
-	nodelabels()
-	tiplabels()
-	####################
-
+	
 	#get basic tree info
 	edge<-x$edge
-	nbt<-Ntip(x)
-	nbn<-Nnode(x)
-	maxn<-nbt+nbn
+
+
+	##PLOT FUN
+	x.lim<-range(xy$xx)
+	y.lim<-range(xy$yy)
+
+	par(mfrow=c(1,2))
+	plottree(edge, xy, xlim=x.lim, ylim=y.lim)
+
+
+
+	Ntip<-Ntip(x)
+	Nnode<-Nnode(x)
+	maxn<-Ntip+Nnode
 
 	#prepare data
-	oedge<-edge[match(1:maxn,edge[,2]),1]
+	oedge<-edge[match(seq_len(maxn),edge[,2]),1]
 	segofnodes<-data.frame(x1=xy$xx[oedge], y1=xy$yy, x2=xy$xx,y2=xy$yy)
 	
 	nodes<-order(xy$xx, decreasing=T)
-	#first traversal: get contours for each node
 	N<-list()
-	for (n in nodes[1:14]) { #START OF LOOP ON NODES
+	for (n in nodes) {
 		N[[n]]<-list()
 		childs<-edge[edge[,1]==n,2]
 		childs.ord<-childs[order(xy$yy[childs])] #childs orderd by y values (for 2nd traversal)
-		# childbottom<-childs[order(xy$yy[childs])][1]
-		# childtop<-childs[order(xy$yy[childs], decreasing=T)][1]
 		desc<-c(childs,unlist(lapply(N[childs], function(x) x$desc)))
-		# descbottom<-c(childbottom,unlist(lapply(N[childbottom], function(x) x$descbottom)))
-		# desctop<-c(childtop,unlist(lapply(N[childtop], function(x) x$desctop)))
 
+		diffiny<-0
 
-
-		descseg<-segofnodes[n,]
-
-		segtop.pre<-rbind(descseg, do.call(rbind, lapply(N[childs], function(x) x$segtop)))
-		segtop<-getContourFromSegments(segtop.pre, "top")
-
-		segbottom.pre<-rbind(descseg, do.call(rbind, lapply(N[childs], function(x) x$segbottom)))
-		segbottom<-getContourFromSegments(segbottom.pre, "bottom")
-
-
-
-
-		## at each step we can look at the childs (they have already been treated by def)
-		## et compute the movement (mod)
-		if (n>nbt) { #we are in a node
-			#for each child c in the correct order (childs.ord)
-			#compare the top contour of c the bottom contour of c+1
+		if (n>Ntip) { #we are in a node
+			oldyofcurrentnode<-xynew$yy[n]
 			for (nn in 2:length(childs.ord)) {
 				miniychild<-NULL
 				maxiychild<-NULL
-				#these two allow re-computing the y coo of node if child moved
 				top<-N[[childs.ord[nn-1]]]$segtop
 				bot<-N[[childs.ord[nn]]]$segbottom
 				mindist<-GetMinDistBetweenContours(top, bot)
-				print(mindist)
-				if (mindist > 1) { ##There is room for tidying!
-					mod<-mindist-1 #how much we can move down the top child.ord[nn]
-					#1. move down all y values of childs.ord[nn]
+				if (mindist > 1) { ## There is room for tidying
+					mod<-mindist-1
 					N[[childs.ord[nn]]]$segbottom[,c(2,4)]<-N[[childs.ord[nn]]]$segbottom[,c(2,4)]-mod
-					#et on met à jour xynew en même temps 					
-					xynew$yy[c(childs.ord[nn], N[[childs.ord[nn]]]$childs)]<-xynew$yy[c(childs.ord[nn], N[[childs.ord[nn]]]$childs)]-mod
-					#now we change the contour y values accordingly
-					print(N[[childs.ord[nn]]])
-					print(paste("current node: ",n,sep=""))
-					print(paste("we must move ",childs.ord[nn]," by ",mod, " down"), sep="")
-					plot(x)
-					nodelabels()
-					tiplabels()
-					segplot(top, col="red")
-					segplot(bot, col="green")
-					scan()
+					N[[childs.ord[nn]]]$segtop[,c(2,4)]<-N[[childs.ord[nn]]]$segtop[,c(2,4)]-mod
+				
+					xynew$yy[c(childs.ord[nn], N[[childs.ord[nn]]]$desc)]<-xynew$yy[c(childs.ord[nn], N[[childs.ord[nn]]]$desc)]-mod
 				}
 			}
-			#we can compute the new y of the current node: 
-			newyofcurrentnode<-mean(range(xynew$yy[childs.ord])) ###HERE WE ARE
+			newyofcurrentnode<-mean(range(xynew$yy[childs.ord]))
+			xynew$yy[n]<-newyofcurrentnode
+			diffiny<-oldyofcurrentnode-newyofcurrentnode
 		}
+
+		descseg<-segofnodes[n,]
+		descseg[,c(2,4)]<-descseg[,c(2,4)]-diffiny
+		segtop.pre<-rbind(descseg, do.call(rbind, lapply(N[childs], function(x) x$segtop)))
+		segtop<-GetContourPairsFromSegments(segtop.pre, "top")
+		segbottom.pre<-rbind(descseg, do.call(rbind, lapply(N[childs], function(x) x$segbottom)))
+		segbottom<-GetContourPairsFromSegments(segbottom.pre, "bottom")
 
 		N[[n]]$childs<-childs.ord
 		N[[n]]$desc<-desc
 		N[[n]]$segtop<-segtop
 		N[[n]]$segbottom<-segbottom	
 
-	} #END OF (FIRST) LOOP ON NODES 
+	} 
+plottree(edge, xynew, xlim=x.lim, ylim=y.lim)
+}
 
-	# second traversal: compute for each subtree it's possible movement, given 
-	# the distance between its bottom contour and the top contour of its bottom sibling subtree
-	# at each node how much it should move down. 
-	# We explore the tree by nodes in decreasing x values. We always move nodes down.
-	# Childs are taken in in creasing y value order. (Because we always move nodes down)
+
+
+tidy.xy<-function(edge, Ntip, Nnode, xx, yy) {
+	xynew<-data.frame(xx=xx,yy=yy) #will be updated to get the new coordinates at the end
+
+	oedge<-edge[match(seq_len(Ntip+Nnode),edge[,2]),1] # ordered edges 
+	segofnodes<-data.frame(x1=xx[oedge], y1=yy, x2=xx,y2=yy) # segment associated to each node
+
+	nodes<-order(xx, decreasing=T)
+	N<-list() ##will contain all info for each node.
+
+	for (n in nodes) {
+		N[[n]]<-list()
+		childs<-edge[edge[,1]==n,2]
+		childs.ord<-childs[order(yy[childs])] #childs orderd by y values (for 2nd traversal)
+		desc<-c(childs,unlist(lapply(N[childs], function(x) x$desc)))
+
+		diffiny<-0
+
+		if (n>Ntip) { #we are in a node
+			oldyofcurrentnode<-xynew$yy[n]
+			for (nn in 2:length(childs.ord)) {
+				miniychild<-NULL
+				maxiychild<-NULL
+				top<-N[[childs.ord[nn-1]]]$segtop
+				bot<-N[[childs.ord[nn]]]$segbottom
+				mindist<-GetMinDistBetweenContours(top, bot)
+				if (mindist > 1) { ## There is room for tidying
+					mod<-mindist-1
+					N[[childs.ord[nn]]]$segbottom[,c(2,4)]<-N[[childs.ord[nn]]]$segbottom[,c(2,4)]-mod
+					N[[childs.ord[nn]]]$segtop[,c(2,4)]<-N[[childs.ord[nn]]]$segtop[,c(2,4)]-mod
+				
+					xynew$yy[c(childs.ord[nn], N[[childs.ord[nn]]]$desc)]<-xynew$yy[c(childs.ord[nn], N[[childs.ord[nn]]]$desc)]-mod
+				}
+			}
+			newyofcurrentnode<-mean(range(xynew$yy[childs.ord]))
+			xynew$yy[n]<-newyofcurrentnode
+			diffiny<-oldyofcurrentnode-newyofcurrentnode
+		}
+
+		descseg<-segofnodes[n,]
+		descseg[,c(2,4)]<-descseg[,c(2,4)]-diffiny
+		segtop.pre<-rbind(descseg, do.call(rbind, lapply(N[childs], function(x) x$segtop)))
+		segtop<-GetContourPairsFromSegments(segtop.pre, "top")
+		segbottom.pre<-rbind(descseg, do.call(rbind, lapply(N[childs], function(x) x$segbottom)))
+		segbottom<-GetContourPairsFromSegments(segbottom.pre, "bottom")
+
+		N[[n]]$childs<-childs.ord
+		N[[n]]$desc<-desc
+		N[[n]]$segtop<-segtop
+		N[[n]]$segbottom<-segbottom	
+
+	}
+	return(xynew)		
+}
+
+
+
+
+tidy.plot <- function(edge, Ntip, Nnode, xx, yy, horizontal,
+                           edge.color = NULL, edge.width = NULL,
+                           edge.lty = NULL,
+                           node.color = NULL, node.width = NULL,
+                           node.lty = NULL) 
+{
+
+	xynew<-data.frame(xx=xx,yy=yy) #will be updated to get the new coordinates at the end
+
+	oedge<-edge[match(seq_len(Ntip+Nnode),edge[,2]),1] #ordered edges 
+	segofnodes<-data.frame(x1=xx[oedge], y1=yy, x2=xx,y2=yy) 
+
+	nodes<-order(xx, decreasing=T)
+	N<-list() ##will contain all info for each node.
+
+	for (n in nodes) {
+		N[[n]]<-list()
+		childs<-edge[edge[,1]==n,2]
+		childs.ord<-childs[order(yy[childs])] #childs orderd by y values (for 2nd traversal)
+		desc<-c(childs,unlist(lapply(N[childs], function(x) x$desc)))
+
+		diffiny<-0
+
+		if (n>Ntip) { #we are in a node
+			oldyofcurrentnode<-xynew$yy[n]
+			for (nn in 2:length(childs.ord)) {
+				miniychild<-NULL
+				maxiychild<-NULL
+				top<-N[[childs.ord[nn-1]]]$segtop
+				bot<-N[[childs.ord[nn]]]$segbottom
+				mindist<-GetMinDistBetweenContours(top, bot)
+				if (mindist > 1) { ## There is room for tidying
+					mod<-mindist-1
+					N[[childs.ord[nn]]]$segbottom[,c(2,4)]<-N[[childs.ord[nn]]]$segbottom[,c(2,4)]-mod
+					N[[childs.ord[nn]]]$segtop[,c(2,4)]<-N[[childs.ord[nn]]]$segtop[,c(2,4)]-mod
+				
+					xynew$yy[c(childs.ord[nn], N[[childs.ord[nn]]]$desc)]<-xynew$yy[c(childs.ord[nn], N[[childs.ord[nn]]]$desc)]-mod
+				}
+			}
+			newyofcurrentnode<-mean(range(xynew$yy[childs.ord]))
+			xynew$yy[n]<-newyofcurrentnode
+			diffiny<-oldyofcurrentnode-newyofcurrentnode
+		}
+
+		descseg<-segofnodes[n,]
+		descseg[,c(2,4)]<-descseg[,c(2,4)]-diffiny
+		segtop.pre<-rbind(descseg, do.call(rbind, lapply(N[childs], function(x) x$segtop)))
+		segtop<-GetContourPairsFromSegments(segtop.pre, "top")
+		segbottom.pre<-rbind(descseg, do.call(rbind, lapply(N[childs], function(x) x$segbottom)))
+		segbottom<-GetContourPairsFromSegments(segbottom.pre, "bottom")
+
+		N[[n]]$childs<-childs.ord
+		N[[n]]$desc<-desc
+		N[[n]]$segtop<-segtop
+		N[[n]]$segbottom<-segbottom	
+
+	} 
+
+#	plot(xy, type="n", frame.plot=FALSE, axes=F, xlab="", ylab="", xlim=xlim, ylim=ylim)	
+	#horizontal segments
+	X1<-xynew$xx[edge[,1]]
+	Y1<-xynew$yy[edge[,2]]
+	X2<-xynew$xx[edge[,2]]
+	Y2<-xynew$yy[edge[,2]]
+	segments(X1,Y1,X2,Y2)
+	##vertical segments
+	XX1<-X1
+	YY1<-xynew$yy[edge[,1]]
+	XX2<-XX1
+	YY2<-Y2
+	segments(XX1, YY1,XX2,YY2)
+}
+
+
+
+
+
+
+
+# X<-seq(100,3000, by=100)
+# trees<-sapply(X, function(x) rtree(x), simplify=F)
+# Y<-unlist(lapply(trees, function(x) system.time(silent(x))[[1]]))
+# plot(X,Y, type="o")

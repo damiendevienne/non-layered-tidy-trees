@@ -15,7 +15,7 @@ require(ape)
 
 
 
-plot.tidy<-function(x, show.tip.label=T, cex=1, x.lim = NULL, y.lim = NULL, verbose=T, ...) {
+plot.tidy<-function(x, show.tip.label=T, cex=1, x.lim = NULL, y.lim = NULL, verbose = T, ...) {
 	xy<-as.data.frame(plotPhyloCoor(x))
 	#get basic tree info
 	xe<-x$edge
@@ -23,6 +23,12 @@ plot.tidy<-function(x, show.tip.label=T, cex=1, x.lim = NULL, y.lim = NULL, verb
 	Nnode<-Nnode(x)
 	xx<-xy$xx
 	yy<-xy$yy
+
+    z<-reorder(x,"postorder")
+    ze<-z$edge
+
+    if (any(x$edge.length<0)) stop ("negative branch lengths found. Try again.")
+
 
     getStringLengthbyTip <- function(x,lab,sin,cex) {
         s <- strwidth(lab, "inches", cex = cex)
@@ -54,14 +60,14 @@ plot.tidy<-function(x, show.tip.label=T, cex=1, x.lim = NULL, y.lim = NULL, verb
     }
 
 	if (!show.tip.label) {
-		yy<-tidy.xy(xe, Ntip, Nnode, xx, yy, verbose)
+		yy<-tidy.xy(ze, Ntip, Nnode, xx, yy, verbose)
 	} else { #we add to xx the size taken by labels, so that tidying considers labels 
 		xx.tips<-xx[1:Ntip]
 	    pin1 <- par("pin")[1] # width of the device in inches               
 	    lab.strlength<-getStringLengthbyTip(xx.tips,x$tip.label, pin1, cex) #size of lab strings
 	    xx2<-xx
 	    xx2[1:Ntip]<-xx2[1:Ntip]+lab.strlength
-	    yy<-tidy.xy(xe, Ntip, Nnode, xx2, yy, verbose) #compress taking labels into account
+	    yy<-tidy.xy(ze, Ntip, Nnode, xx2, yy, verbose) #compress taking labels into account
 	}
 	xy<-data.frame(xx=xx, yy=yy)
 	if (is.null(x.lim)) {
@@ -114,33 +120,39 @@ tidy.xy<-function(edge, Ntip, Nnode, xx, yy, verbose=F) {
     oedge<-edge[match(seq_len(Ntip+Nnode),edge[,2]),1] # ordered edges 
     segofnodes<-data.frame(x1=xx[oedge], y1=yy, x2=xx,y2=yy) # segment associated to each node
 
-    nodes<-order(xx, decreasing=T)
+    postordernodes<-edge[,2]
+    #order(xx[postordernodes], decreasing=T)
+    nodes<-c(postordernodes[order(xx[postordernodes], decreasing=T)], Ntip+1)
+    
+#    nodes2<-order(xx, decreasing=T)
 
     GetContourPairsFromSegments<-function(seg, which) {
-        allx<-sort(unique(c(seg$x1, seg$x2)))
-        newx2<-allx[2:length(allx)]
-        if (which=="top")   {
-            newy2i<-sapply(newx2, function(cx,se) which(cx>se$x1&cx<=se$x2)[which.max(se$y1[which(cx>se$x1&cx<=se$x2)])], se=seg)
-        }
-        if (which=="bottom") {
-            newy2i<-sapply(newx2, function(cx,se) which(cx>se$x1&cx<=se$x2)[which.min(se$y1[which(cx>se$x1&cx<=se$x2)])], se=seg)
-        }
+        if (nrow(seg)>1) { #solves issue with branch length = 0
+            allx<-sort(unique(c(seg$x1, seg$x2)))
+            newx2<-allx[2:length(allx)]
+            if (which=="top")   {
+                newy2i<-sapply(newx2, function(cx,se) which(cx>se$x1&cx<=se$x2)[which.max(se$y1[which(cx>se$x1&cx<=se$x2)])], se=seg)
+            }
+            if (which=="bottom") {
+                newy2i<-sapply(newx2, function(cx,se) which(cx>se$x1&cx<=se$x2)[which.min(se$y1[which(cx>se$x1&cx<=se$x2)])], se=seg)
+            }
+            newx1<-allx[1:(length(allx)-1)]
+            newy1i<-newy2i
+            #we simplify segments by merging thsoe on same horiz  (bout à bout)
+            where2mergei<-which((newy1i[2:length(newy1i)]-newy2i[1:(length(newy1i)-1)])==0)
+            if(length(where2mergei)>0) {
+                newx1<-newx1[-(where2mergei+1)]
+                newy1i<-newy1i[-(where2mergei+1)]
+                newx2<-newx2[-(where2mergei)]
+                newy2i<-newy2i[-(where2mergei)]
+            }
 
-        newx1<-allx[1:(length(allx)-1)]
-        newy1i<-newy2i
-        #we simplify segments by merging thsoe on same horiz  (bout à bout)
-        where2mergei<-which((newy1i[2:length(newy1i)]-newy2i[1:(length(newy1i)-1)])==0)
-        if(length(where2mergei)>0) {
-            newx1<-newx1[-(where2mergei+1)]
-            newy1i<-newy1i[-(where2mergei+1)]
-            newx2<-newx2[-(where2mergei)]
-            newy2i<-newy2i[-(where2mergei)]
+            newy1ok<-seg$y1[newy1i]
+            newy2ok<-newy1ok
+            newseg<-data.frame(x1=newx1, y1=newy1ok, x2=newx2, y2=newy2ok)
+            ##TODO: simplify new seg to remove segments "bout à bout"
         }
-
-        newy1ok<-seg$y1[newy1i]
-        newy2ok<-newy1ok
-        newseg<-data.frame(x1=newx1, y1=newy1ok, x2=newx2, y2=newy2ok)
-        ##TODO: simplify new seg to remove segments "bout à bout"
+        else newseg<-seg 
         return(newseg)
     }
     GetMinDistBetweenContours<- function(topcontour, bottomcontour) {
@@ -149,6 +161,9 @@ tidy.xy<-function(edge, Ntip, Nnode, xx, yy, verbose=F) {
         d<-NULL
         topi<-1
         boti<-1
+        # print("---")
+        # print(topcontour)
+        # print(bottomcontour)
         while((topi<=nrow(topcontour))&(boti<=nrow(bottomcontour))) {
             d<-c(d,bottomcontour[boti,]$y1-topcontour[topi,]$y1)
             if (bottomcontour[boti,]$x2<topcontour[topi,]$x2) boti<-boti+1
